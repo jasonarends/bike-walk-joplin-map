@@ -11,7 +11,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,19 +21,8 @@
   <header id="app-header">
     <div class="header-inner">
       <div class="brand">
-        <div class="brand-logo">
-          <svg viewBox="0 0 32 32" fill="none">
-            <circle cx="9"  cy="22" r="5.5" stroke="currentColor" stroke-width="2"/>
-            <circle cx="23" cy="22" r="5.5" stroke="currentColor" stroke-width="2"/>
-            <path d="M9 22L13 11L18 17L23 22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="21" cy="6" r="2.5" fill="currentColor"/>
-            <path d="M21 9L18 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="brand-text">
-          <span class="brand-name">Bike Walk <em>Joplin</em></span>
-          <span class="brand-tagline">Community Safety Map</span>
-        </div>
+        <img src="logo.png" alt="Bike Walk Joplin" class="brand-logo-img">
+        <span class="brand-tagline">Community Safety Map</span>
       </div>
       <nav class="header-nav">
         <a href="https://bikewalkjoplin.org" target="_blank" rel="noopener" class="nav-link">About BWJ</a>
@@ -161,6 +150,16 @@
           <div><span class="layer-name">Schools</span><span class="layer-desc">+ 1-mile walk zone</span></div>
         </div>
         <label class="toggle-switch"><input type="checkbox" id="toggle-schools"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="layer-item" id="strava-layer-item">
+        <div class="layer-info">
+          <span class="layer-swatch swatch-strava"></span>
+          <div>
+            <span class="layer-name">Strava Heatmap <span class="badge-tiles" id="strava-badge">Offline</span></span>
+            <span class="layer-desc">Where people ride &amp; run</span>
+          </div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-strava" disabled><span class="toggle-slider"></span></label>
       </div>
     </div>
   </div>

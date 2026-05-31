@@ -1,0 +1,7 @@
+# Strava tiles — excluded until intentionally committed for deployment
+# When ready to publish: remove this line, then `git add tiles/ && git push`
+tiles/strava/
+
+# OS junk
+.DS_Store
+Thumbs.db

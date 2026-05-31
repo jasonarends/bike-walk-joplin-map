@@ -9,9 +9,9 @@ const SUPABASE_KEY = 'sb_publishable_bG7sx_kuaCwefhByYTB80Q_rsNE5gbX';
 const DATA_SOURCES = {
   jatsoPoints: 'https://services6.arcgis.com/6TZ2wV0tqNiq5bdQ/arcgis/rest/services/BikePedInput_Jatso/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
   jatsoLines:  'https://services6.arcgis.com/6TZ2wV0tqNiq5bdQ/arcgis/rest/services/BikePedInput_Line/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
-  // Confirm org ID by inspecting network requests on the JATSO reporter app
-  bikeInfra:   'https://services1.arcgis.com/RLQu0rK7h4kbsByd/arcgis/rest/services/JATSO_Bike_Paths/FeatureServer/4/query?where=1%3D1&outFields=*&f=geojson',
-  schools:     'https://overpass-api.de/api/interpreter?data=[out:json];node["amenity"="school"](36.96,-94.62,37.18,-94.44);out;',
+  bikeInfra: 'https://services1.arcgis.com/5olyYd7fCfTTiVp8/ArcGIS/rest/services/JATSO_Bike_Paths/FeatureServer/4/query?where=1%3D1&outFields=*&f=geojson',
+  // NCES EDGE 2023-24 school geocodes — authoritative federal data, updated annually
+  schools:   'https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_GEOCODE_PUBLICSCH_2324/MapServer/0/query?where=CITY+%3D+%27JOPLIN%27+AND+STATE+%3D+%27MO%27&outFields=NAME,STREET,GRADESPAN,STATUS&f=json',
 };
 
 // ---- Supabase client ----
@@ -463,38 +463,101 @@ function initPhotoUpload() {
   }
 }
 
+// ---- Strava heatmap layer (local cached tiles) ----
+// Tiles are downloaded via scripts/download_strava_tiles.py and committed to the repo.
+// The layer is enabled automatically once tiles/strava/ is populated.
+// Opacity is kept low so the heatmap overlays without overwhelming the base map.
+
+// Tiles are 512×512 @2x PNGs saved as {z}/{x}/{y}.png
+// tileSize:512 + zoomOffset:-1 tells Leaflet to treat each tile as covering
+// a 512px slot, so zoom levels align correctly with the rest of the map.
+const STRAVA_TILE_PATH = 'tiles/strava/{z}/{x}/{y}.png';
+
+async function initStravaLayer() {
+  // Check if tiles exist by probing a known central tile (z13 over Joplin)
+  // lon=-94.51 lat=37.08 → tile x=1943 y=3124 at z=13
+  const probePath = 'tiles/strava/13/1943/3124.png';
+  try {
+    const res = await fetch(probePath, { method: 'HEAD' });
+    if (res.ok) {
+      enableStravaToggle();
+    }
+  } catch {
+    // Tiles not present — toggle stays disabled
+  }
+}
+
+function enableStravaToggle() {
+  const toggle = document.getElementById('toggle-strava');
+  const badge  = document.getElementById('strava-badge');
+  if (toggle) toggle.disabled = false;
+  if (badge)  { badge.textContent = 'Ready'; badge.classList.add('ready'); }
+}
+
+function addStravaLayer() {
+  if (layerGroups.strava) { layerGroups.strava.addTo(map); return; }
+  layerGroups.strava = L.tileLayer(STRAVA_TILE_PATH, {
+    minZoom:    12,
+    maxZoom:    16,
+    tileSize:   512,   // tiles are 512×512 (@2x)
+    zoomOffset: -1,    // compensate so zoom levels align with the base map
+    opacity:    0.7,
+    errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  }).addTo(map);
+}
+
+function removeStravaLayer() {
+  if (layerGroups.strava) map.removeLayer(layerGroups.strava);
+}
+
 // ---- Schools layer ----
 async function loadSchools() {
   if (layerGroups.schools) { layerGroups.schools.addTo(map); layerGroups.schoolZones?.addTo(map); return; }
   showToast('Loading schools…', 'info');
   try {
-    const res = await fetch(DATA_SOURCES.schools);
+    const res  = await fetch(DATA_SOURCES.schools);
     const data = await res.json();
     const group = L.featureGroup();
     const zones = L.featureGroup();
 
-    data.elements.forEach(el => {
-      if (el.type !== 'node') return;
-      const name = el.tags?.name || 'School';
-      L.circle([el.lat, el.lon], { radius: 1609, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.06, weight: 1.5, opacity: 0.3 }).addTo(zones);
-      L.marker([el.lat, el.lon], {
+    // NCES returns {features: [{attributes: {NAME, STREET, LAT, LON, ...}}]}
+    // geometry.x/y also available but attribute LAT/LON is clearer
+    (data.features || []).forEach(f => {
+      const a    = f.attributes;
+      const lat  = a.LAT  ?? f.geometry?.y;
+      const lon  = a.LON  ?? f.geometry?.x;
+      if (!lat || !lon) return;
+
+      const name  = a.NAME  ? toTitleCase(a.NAME)  : 'School';
+      const grade = a.GRADESPAN ? `Grades ${a.GRADESPAN}` : '';
+
+      L.circle([lat, lon], {
+        radius: 1609, color: '#1370AF', fillColor: '#1370AF',
+        fillOpacity: 0.07, weight: 1.5, opacity: 0.3,
+      }).addTo(zones);
+
+      L.marker([lat, lon], {
         icon: L.divIcon({
-          html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22"><circle cx="11" cy="11" r="9" fill="#3b82f6" stroke="white" stroke-width="1.5"/><text x="11" y="15" text-anchor="middle" font-size="11" fill="white">🏫</text></svg>`,
+          html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22"><circle cx="11" cy="11" r="9" fill="#1370AF" stroke="white" stroke-width="1.5"/><text x="11" y="15" text-anchor="middle" font-size="11" fill="white">🏫</text></svg>`,
           className: '', iconSize: [22,22], iconAnchor: [11,11], popupAnchor: [0,-13],
         })
       })
-        .bindPopup(makePopup('School', 'type-school', name, ['1-mile walk zone']), { maxWidth: 240 })
+        .bindPopup(makePopup('School', 'type-school', name, [grade, '1-mile walk zone'].filter(Boolean)), { maxWidth: 240 })
         .addTo(group);
     });
 
     layerGroups.schoolZones = zones.addTo(map);
     layerGroups.schools     = group.addTo(map);
-    showToast(`Loaded ${data.elements.length} schools`, 'success');
+    showToast(`Loaded ${data.features.length} schools`, 'success');
   } catch (err) {
     console.error('Schools failed:', err);
     showToast('Could not load school data', 'error');
     const t = document.getElementById('toggle-schools'); if (t) t.checked = false;
   }
+}
+
+function toTitleCase(str) {
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function removeSchools() {
@@ -513,6 +576,9 @@ function initLayerToggles() {
   });
   document.getElementById('toggle-schools')?.addEventListener('change', e => {
     e.target.checked ? loadSchools() : removeSchools();
+  });
+  document.getElementById('toggle-strava')?.addEventListener('change', e => {
+    e.target.checked ? addStravaLayer() : removeStravaLayer();
   });
   document.getElementById('layer-panel-toggle')?.addEventListener('click', () => {
     document.getElementById('layer-panel').classList.add('collapsed');
@@ -589,4 +655,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initDrawToolbar();
   initMetaPanel();
   initModal();
+  initStravaLayer();  // probe for tiles, enables toggle if present
 });
