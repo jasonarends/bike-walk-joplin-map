@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Community-powered bike and pedestrian safety map for Joplin, MO. Report issues, suggest routes, and help build a safer city.">
+  <title>Community Safety Map · Bike Walk Joplin</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header id="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="9" cy="22" r="5.5" stroke="currentColor" stroke-width="2"/>
+            <circle cx="23" cy="22" r="5.5" stroke="currentColor" stroke-width="2"/>
+            <path d="M9 22L13 11L18 17L23 22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="21" cy="6" r="2.5" fill="currentColor"/>
+            <path d="M21 9L18 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Bike Walk <em>Joplin</em></span>
+          <span class="brand-tagline">Community Safety Map</span>
+        </div>
+      </div>
+      <nav class="header-nav">
+        <a href="https://bikewalkjoplin.org" target="_blank" rel="noopener" class="nav-link">About BWJ</a>
+        <button class="nav-link" id="about-btn">How It Works</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Stats Bar -->
+  <div id="stats-bar">
+    <div class="stats-inner">
+      <div class="stat-item" id="stat-points">
+        <span class="stat-dot dot-jatso"></span>
+        <span class="stat-value">–</span>
+        <span class="stat-label">JATSO reports</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item" id="stat-lines">
+        <span class="stat-dot dot-route"></span>
+        <span class="stat-value">–</span>
+        <span class="stat-label">route suggestions</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item" id="stat-infra">
+        <span class="stat-dot dot-infra"></span>
+        <span class="stat-value">–</span>
+        <span class="stat-label">bike facilities</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item" id="stat-bwj">
+        <span class="stat-dot dot-bwj"></span>
+        <span class="stat-value">0</span>
+        <span class="stat-label">BWJ reports</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item stat-source">
+        <span class="stat-live-indicator"></span>
+        <span class="stat-label">Live · JATSO / Crafton Tull</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div id="map">
+    <div id="map-loading">
+      <div class="loading-spinner"></div>
+      <p>Loading map data…</p>
+    </div>
+  </div>
+
+  <!-- Layer Control Panel -->
+  <div id="layer-panel">
+    <div class="panel-header">
+      <h3>Map Layers</h3>
+      <button class="panel-icon-btn" id="layer-panel-toggle" aria-label="Collapse layers">
+        <svg viewBox="0 0 16 16"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="layer-section-label">JATSO Official Data</div>
+    <div class="layer-list">
+      <div class="layer-item">
+        <div class="layer-info">
+          <span class="layer-swatch" style="background:#8b6fb3"></span>
+          <div><span class="layer-name">Problem Reports</span><span class="layer-desc">Community input points</span></div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-points" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="layer-item">
+        <div class="layer-info">
+          <span class="layer-swatch" style="background:#7c5cbf;border-radius:2px"></span>
+          <div><span class="layer-name">Route Suggestions</span><span class="layer-desc">Community input lines</span></div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-lines" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="layer-item">
+        <div class="layer-info">
+          <span class="layer-swatch" style="background:#1cc760;border-radius:2px"></span>
+          <div><span class="layer-name">Bike Facilities</span><span class="layer-desc">Existing infrastructure</span></div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-infra" checked><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+
+    <div class="layer-section-label">BWJ Community</div>
+    <div class="layer-list">
+      <div class="layer-item">
+        <div class="layer-info">
+          <span class="layer-swatch" style="background:#f5a623"></span>
+          <div><span class="layer-name">BWJ Reports</span><span class="layer-desc">Your submissions</span></div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-bwj" checked><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+
+    <div class="layer-section-label">Context Layers</div>
+    <div class="layer-list">
+      <div class="layer-item">
+        <div class="layer-info">
+          <span class="layer-swatch" style="background:#3b82f6"></span>
+          <div><span class="layer-name">Schools</span><span class="layer-desc">+ 1-mile walk zone</span></div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-schools"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="layer-item layer-item-beta">
+        <div class="layer-info">
+          <span class="layer-swatch swatch-strava"></span>
+          <div><span class="layer-name">Strava Heatmap <span class="badge-beta">Soon</span></span><span class="layer-desc">Where people ride &amp; run</span></div>
+        </div>
+        <label class="toggle-switch"><input type="checkbox" id="toggle-strava" disabled><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+  </div>
+
+  <button id="layer-panel-open" class="layer-panel-fab" style="display:none" aria-label="Show layers">
+    <svg viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    Layers
+  </button>
+
+  <!-- Report Button -->
+  <button id="report-btn" class="report-fab">
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M10 2C6.13 2 3 5.13 3 9c0 5.25 7 11 7 11s7-5.75 7-11c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" fill="currentColor"/>
+    </svg>
+    <span>Report an Issue</span>
+  </button>
+
+  <!-- Form Panel -->
+  <div id="form-panel" class="form-panel" aria-hidden="true">
+    <div class="form-panel-inner">
+
+      <div class="form-header">
+        <div class="form-progress">
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <span class="progress-label" id="progress-label">Step 1 of 4</span>
+        </div>
+        <button class="panel-icon-btn" id="form-close" aria-label="Close form">
+          <svg viewBox="0 0 16 16"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="form-steps">
+
+        <!-- Step 1: Location -->
+        <div class="form-step active" id="step-1">
+          <h2 class="step-title">Where is it?</h2>
+          <p class="step-desc">Click a spot on the map to drop a pin, or type an address.</p>
+          <div class="location-pin-indicator" id="pin-indicator">
+            <div class="pin-pulse-dot"></div>
+            <span id="pin-status">Click the map to place your pin</span>
+          </div>
+          <div class="coord-display" id="coord-display" style="display:none">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 1C5.24 1 3 3.24 3 6c0 3.75 5 9 5 9s5-5.25 5-9c0-2.76-2.24-5-5-5zm0 6.5A1.5 1.5 0 1 1 8 4a1.5 1.5 0 0 1 0 3z" fill="currentColor"/></svg>
+            <span id="coord-text"></span>
+            <button class="clear-pin-btn" id="clear-pin">Clear</button>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="address-input">Address or intersection <span class="field-optional">(optional)</span></label>
+            <input type="text" id="address-input" class="field-input" placeholder="e.g. Main St &amp; 7th Ave, Joplin">
+          </div>
+        </div>
+
+        <!-- Step 2: Type & Mode -->
+        <div class="form-step" id="step-2">
+          <h2 class="step-title">What are you reporting?</h2>
+          <div class="field-group">
+            <label class="field-label">Submission type</label>
+            <div class="choice-grid" id="submission-type">
+              <button class="choice-btn" data-value="problem">
+                <span class="choice-icon">⚠️</span>
+                <span class="choice-label">Problem area</span>
+                <span class="choice-desc">Something dangerous or broken</span>
+              </button>
+              <button class="choice-btn" data-value="route">
+                <span class="choice-icon">🛣️</span>
+                <span class="choice-label">Route suggestion</span>
+                <span class="choice-desc">A corridor that needs a facility</span>
+              </button>
+              <button class="choice-btn" data-value="good">
+                <span class="choice-icon">✅</span>
+                <span class="choice-label">Good example</span>
+                <span class="choice-desc">Worth replicating elsewhere</span>
+              </button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Who is affected?</label>
+            <div class="choice-row" id="mode-select">
+              <button class="choice-pill" data-value="pedestrian">🚶 Pedestrian</button>
+              <button class="choice-pill" data-value="cyclist">🚲 Cyclist</button>
+              <button class="choice-pill" data-value="both">Both</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Details -->
+        <div class="form-step" id="step-3">
+          <h2 class="step-title">Tell us more</h2>
+          <div class="field-group" id="issue-checks-group">
+            <label class="field-label">What's the issue? <span class="field-optional">(select all that apply)</span></label>
+            <div class="check-grid" id="issue-checks">
+              <label class="check-item"><input type="checkbox" value="missing-sidewalk"><span>Missing sidewalk</span></label>
+              <label class="check-item"><input type="checkbox" value="poor-pavement"><span>Poor pavement</span></label>
+              <label class="check-item"><input type="checkbox" value="no-bike-lane"><span>No bike lane</span></label>
+              <label class="check-item"><input type="checkbox" value="unsafe-crossing"><span>Unsafe crossing</span></label>
+              <label class="check-item"><input type="checkbox" value="flooding"><span>Flooding / drainage</span></label>
+              <label class="check-item"><input type="checkbox" value="poor-lighting"><span>Poor lighting</span></label>
+              <label class="check-item"><input type="checkbox" value="speeding"><span>Speeding traffic</span></label>
+              <label class="check-item"><input type="checkbox" value="missing-signage"><span>Missing signage</span></label>
+              <label class="check-item"><input type="checkbox" value="other"><span>Other</span></label>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="description">Description</label>
+            <textarea id="description" class="field-textarea" rows="3" placeholder="Describe what you've observed…"></textarea>
+          </div>
+          <div class="field-row">
+            <div class="field-group" id="frequency-group">
+              <label class="field-label">How often?</label>
+              <select class="field-select" id="frequency">
+                <option value="">Select…</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="occasionally">Occasionally</option>
+                <option value="first-time">First time noticing</option>
+              </select>
+            </div>
+            <div class="field-group" id="severity-group">
+              <label class="field-label">Severity</label>
+              <div class="severity-btns" id="severity-select">
+                <button class="severity-btn low" data-value="low">Low</button>
+                <button class="severity-btn med" data-value="medium">Med</button>
+                <button class="severity-btn high" data-value="high">High</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4: Photo & Contact -->
+        <div class="form-step" id="step-4">
+          <h2 class="step-title">Photo & contact <span class="step-optional">(optional)</span></h2>
+          <div class="field-group">
+            <label class="field-label">Add a photo</label>
+            <div class="photo-upload-area" id="photo-upload-area">
+              <input type="file" id="photo-input" accept="image/*" class="photo-input-hidden">
+              <div class="photo-placeholder" id="photo-placeholder">
+                <svg viewBox="0 0 48 48" fill="none"><rect x="4" y="10" width="40" height="30" rx="3" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="25" r="7" stroke="currentColor" stroke-width="2"/><path d="M18 10l3-4h6l3 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <p>Click or drag to upload</p>
+                <span>JPG, PNG, HEIC · max 10MB</span>
+              </div>
+              <div class="photo-preview" id="photo-preview" style="display:none">
+                <img id="photo-preview-img" src="" alt="Preview">
+                <button class="remove-photo-btn" id="remove-photo">Remove</button>
+              </div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="name-input">Your name <span class="field-optional">(optional)</span></label>
+            <input type="text" id="name-input" class="field-input" placeholder="First name is fine">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="email-input">Email <span class="field-optional">(optional)</span></label>
+            <input type="email" id="email-input" class="field-input" placeholder="you@example.com">
+            <label class="checkbox-label">
+              <input type="checkbox" id="followup-check">
+              <span>Bike Walk Joplin may follow up with me about this report</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Success -->
+        <div class="form-step" id="step-success">
+          <div class="success-state">
+            <div class="success-icon">
+              <svg viewBox="0 0 64 64" fill="none">
+                <circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="2"/>
+                <path d="M18 32l10 10 18-18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h2>Thank you!</h2>
+            <p>Your report has been submitted to Bike Walk Joplin. We review every submission and use them to advocate for safer streets.</p>
+            <p class="success-note">Your pin will remain on the map for this session.</p>
+            <button class="btn-primary" id="submit-another">Report another issue</button>
+          </div>
+        </div>
+
+      </div><!-- /form-steps -->
+
+      <div class="form-nav" id="form-nav">
+        <button class="btn-secondary" id="btn-back" style="display:none">Back</button>
+        <button class="btn-primary" id="btn-next">Continue →</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Overlay -->
+  <div id="overlay" class="overlay" aria-hidden="true"></div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
+  <!-- How It Works Modal -->
+  <div id="how-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" id="how-modal-backdrop"></div>
+    <div class="modal-inner">
+      <button class="panel-icon-btn modal-close" id="how-modal-close" aria-label="Close">
+        <svg viewBox="0 0 16 16"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <h2>How This Map Works</h2>
+      <div class="how-grid">
+        <div class="how-item">
+          <span class="how-num">01</span>
+          <h3>Official JATSO Data</h3>
+          <p>This map loads live data from the JATSO Bike &amp; Pedestrian Plan — a formal effort by the Joplin Area Transportation Study Organization with contractor Crafton Tull. Those points and routes are shown in purple.</p>
+        </div>
+        <div class="how-item">
+          <span class="how-num">02</span>
+          <h3>Community Reports</h3>
+          <p>Use the "Report an Issue" button to submit your own observations — problem spots, route ideas, or places already working well. Submissions go directly to Bike Walk Joplin.</p>
+        </div>
+        <div class="how-item">
+          <span class="how-num">03</span>
+          <h3>BWJ Advocacy</h3>
+          <p>Bike Walk Joplin uses this data to advocate with city officials, prioritize improvements, and build the case for a safer, more connected Joplin for everyone.</p>
+        </div>
+        <div class="how-item">
+          <span class="how-num">04</span>
+          <h3>Open Data</h3>
+          <p>All JATSO data is publicly accessible via ArcGIS REST API. This map refreshes live — you always see the latest submissions from both the official process and our community.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
