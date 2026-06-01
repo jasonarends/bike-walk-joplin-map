@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 """
+⚠ SUPERSEDED — use scripts/fetch_crashes.py instead.
+
+This script geocoded MSHP STARS .xls exports through Nominatim. The MSHP TR15Map
+web app turns out to call a public ArcGIS REST endpoint that already returns
+per-crash points with WGS84 coordinates, so the manual XLS download + geocoding
+step is no longer needed. See issue #6.
+
+Kept in tree for historical reference / fallback only.
+
+─────────────────────────────────────────────────────────────────────────────
+
 Geocode Joplin pedestrian & bicycle crash locations from MSHP STARS export.
 
 INPUT
