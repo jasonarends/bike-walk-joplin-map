@@ -11,7 +11,7 @@ const DATA_SOURCES = {
   jatsoLines:  'https://services6.arcgis.com/6TZ2wV0tqNiq5bdQ/arcgis/rest/services/BikePedInput_Line/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
   bikeInfra: 'https://services1.arcgis.com/5olyYd7fCfTTiVp8/ArcGIS/rest/services/JATSO_Bike_Paths/FeatureServer/4/query?where=1%3D1&outFields=*&f=geojson',
   // NCES EDGE 2023-24 school geocodes — authoritative federal data, updated annually
-  schools:   'https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_GEOCODE_PUBLICSCH_2324/MapServer/0/query?where=CITY+%3D+%27JOPLIN%27+AND+STATE+%3D+%27MO%27&outFields=NAME,STREET,GRADESPAN,STATUS,LAT,LON&f=geojson',
+  schools:   'https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_GEOCODE_PUBLICSCH_2324/MapServer/0/query?where=CITY+%3D+%27JOPLIN%27+AND+STATE+%3D+%27MO%27&outFields=*&f=geojson',
 };
 
 // ---- Supabase client ----
@@ -475,8 +475,8 @@ const STRAVA_TILE_PATH = 'tiles/strava/{z}/{x}/{y}.png';
 
 async function initStravaLayer() {
   // Check if tiles exist by probing a known central tile (z13 over Joplin)
-  // lon=-94.51 lat=37.08 → tile x=1943 y=3124 at z=13
-  const probePath = 'tiles/strava/13/1943/3124.png';
+  // lon=-94.51 lat=37.08 → tile x=1943 y=3185 at z=13
+  const probePath = 'tiles/strava/13/1943/3185.png';
   try {
     const res = await fetch(probePath, { method: 'HEAD' });
     if (res.ok) {
@@ -526,8 +526,8 @@ async function loadSchools() {
       const [lon, lat] = f.geometry.coordinates;
       if (!lat || !lon) return;
 
-      const name  = p.NAME  ? toTitleCase(p.NAME)  : 'School';
-      const grade = p.GRADESPAN ? `Grades ${p.GRADESPAN}` : '';
+      const name  = p.NAME   ? toTitleCase(p.NAME)  : 'School';
+      const grade = p.STREET ? toTitleCase(p.STREET) : '';
 
       L.circle([lat, lon], {
         radius: 1609, color: '#1370AF', fillColor: '#1370AF',
@@ -540,7 +540,7 @@ async function loadSchools() {
           className: '', iconSize: [22,22], iconAnchor: [11,11], popupAnchor: [0,-13],
         })
       })
-        .bindPopup(makePopup('School', 'type-school', name, [grade, '1-mile walk zone'].filter(Boolean)), { maxWidth: 240 })
+        .bindPopup(makePopup('School', 'type-school', name, [grade, '1-mile walk zone'].filter(Boolean)), { maxWidth: 260 })
         .addTo(group);
     });
 
