@@ -124,8 +124,8 @@
       </div>
       <div class="layer-item">
         <div class="layer-info">
-          <span class="layer-swatch" style="background:#1cc760;border-radius:2px"></span>
-          <div><span class="layer-name">Bike Facilities</span><span class="layer-desc">Existing infrastructure</span></div>
+          <span class="layer-swatch" style="background:#0d9488;border-radius:2px"></span>
+          <div><span class="layer-name">Bike Lanes &amp; Trails</span><span class="layer-desc">City of Joplin GIS · 2024</span></div>
         </div>
         <label class="toggle-switch"><input type="checkbox" id="toggle-infra" checked><span class="toggle-slider"></span></label>
       </div>
@@ -174,6 +174,16 @@
   <button id="layer-panel-open" class="layer-panel-fab" style="display:none">
     <svg viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
     Layers
+  </button>
+
+  <!-- Mobile-only "Report from My Location" FAB (shown via CSS on touch devices) -->
+  <button id="gps-report-btn" class="report-fab gps-fab" aria-label="Report from my current location">
+    <svg viewBox="0 0 20 20" fill="none">
+      <circle cx="10" cy="10" r="3" fill="currentColor"/>
+      <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M10 1v2M10 17v2M1 10h2M17 10h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <span>Report Here</span>
   </button>
 
   <!-- Add to Map FAB -->
@@ -258,7 +268,7 @@
           </div>
 
           <!-- Severity + Frequency row -->
-          <div class="field-row" id="problem-meta-row">
+          <div class="field-row desktop-only-field" id="problem-meta-row">
             <div class="field-group">
               <label class="field-label">Severity</label>
               <div class="severity-btns" id="severity-select">
@@ -283,7 +293,7 @@
           <div class="field-group">
             <label class="field-label">Photo <span class="field-optional">(optional)</span></label>
             <div class="photo-upload-area" id="photo-upload-area">
-              <input type="file" id="photo-input" accept="image/*" class="photo-input-hidden">
+              <input type="file" id="photo-input" accept="image/*" capture="environment" class="photo-input-hidden">
               <div class="photo-placeholder" id="photo-placeholder">
                 <svg viewBox="0 0 48 48" fill="none"><rect x="4" y="10" width="40" height="30" rx="3" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="25" r="7" stroke="currentColor" stroke-width="2"/><path d="M18 10l3-4h6l3 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <p>Click or drag to upload</p>
@@ -297,11 +307,11 @@
           </div>
 
           <!-- Contact -->
-          <div class="field-group">
+          <div class="field-group desktop-only-field">
             <label class="field-label" for="name-input">Name <span class="field-optional">(optional)</span></label>
             <input type="text" id="name-input" class="field-input" placeholder="First name is fine">
           </div>
-          <div class="field-group">
+          <div class="field-group desktop-only-field">
             <label class="field-label" for="email-input">Email <span class="field-optional">(optional)</span></label>
             <input type="email" id="email-input" class="field-input" placeholder="you@example.com">
             <label class="checkbox-label">
