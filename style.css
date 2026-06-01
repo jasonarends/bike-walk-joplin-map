@@ -60,7 +60,6 @@ html, body {
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-logo-img {
   height: 38px; width: auto;
-  filter: brightness(0) invert(1);   /* white on teal header */
   flex-shrink: 0;
 }
 .brand-tagline {
