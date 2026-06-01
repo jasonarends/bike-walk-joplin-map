@@ -77,11 +77,18 @@ function bwjStyle(submissionType) {
 }
 
 // ---- Popup ----
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
+}
+
 function makePopup(typeLabel, typeClass, body, badges = []) {
-  const b = badges.filter(Boolean).map(x => `<span class="popup-badge">${x}</span>`).join('');
+  const b = badges.filter(Boolean).map(x => `<span class="popup-badge">${escapeHtml(x)}</span>`).join('');
+  const safeBody = body ? escapeHtml(body) : 'No description provided.';
   return `<div class="popup-inner">
-    <div class="popup-type ${typeClass}">${typeLabel}</div>
-    <div class="popup-comment">${body || 'No description provided.'}</div>
+    <div class="popup-type ${typeClass}">${escapeHtml(typeLabel)}</div>
+    <div class="popup-comment">${safeBody}</div>
     ${b ? `<div class="popup-meta">${b}</div>` : ''}
   </div>`;
 }
@@ -422,8 +429,7 @@ function resetFormFields() {
   document.getElementById('photo-input').value = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-placeholder').style.display = '';
-  document.getElementById('issue-checks-group').style.display = '';
-  document.getElementById('problem-meta-row').style.display = '';
+  updateConditionalFields();
 }
 
 // ---- Photo upload ----
@@ -581,7 +587,7 @@ async function loadCrashes() {
     const data = await res.json();
     const group = L.featureGroup();
 
-    data.features.forEach(f => {
+    (data.features || []).forEach(f => {
       const p   = f.properties;
       const [lng, lat] = f.geometry.coordinates;
 
@@ -599,7 +605,7 @@ async function loadCrashes() {
       })
         .bindPopup(makePopup(
           'Crash Hotspot', 'type-crash',
-          `<strong>${p.label}</strong>`,
+          p.label,
           [
             `${p.total} crashes`,
             p.pedestrian ? `${p.pedestrian} pedestrian` : null,
@@ -612,11 +618,11 @@ async function loadCrashes() {
     });
 
     layerGroups.crashes = group.addTo(map);
-    showToast(`Loaded ${data.features.length} crash locations`, 'success');
+    showToast(`Loaded ${(data.features || []).length} crash locations`, 'success');
   } catch (err) {
     console.error('Crash data failed:', err);
     showToast('Could not load crash data', 'error');
-    document.getElementById('toggle-crashes').checked = false;
+    const t = document.getElementById('toggle-crashes'); if (t) t.checked = false;
   }
 }
 
