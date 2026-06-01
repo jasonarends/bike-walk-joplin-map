@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="10-year analysis of pedestrian and bicycle crashes in Joplin, MO — Bike Walk Joplin.">
+  <title>Crash Dashboard · Bike Walk Joplin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header id="dash-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img src="logo.svg" alt="Bike Walk Joplin" class="brand-logo-img">
+        <span class="brand-tagline">Crash Dashboard</span>
+      </div>
+      <div class="header-meta">
+        <span class="data-note" id="data-date-note">Loading data…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tab Bar -->
+  <nav id="tab-bar" role="tablist" aria-label="Dashboard sections">
+    <button class="tab-btn active" role="tab" aria-selected="true"  aria-controls="tab-overview"  data-tab="overview">Overview</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-when"      data-tab="when">When</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-where"     data-tab="where">Where</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-who"       data-tab="who">Who &amp; How</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="tab-risk"      data-tab="risk">Risk &amp; Equity</button>
+  </nav>
+
+  <main id="dash-main">
+
+    <!-- ================================================ TAB 1: OVERVIEW -->
+    <section id="tab-overview" class="tab-panel active" role="tabpanel">
+      <div class="panel-inner">
+
+        <div class="hero-section">
+          <h1 class="hero-headline">Pedestrians and cyclists are getting hurt on Joplin streets.</h1>
+          <p class="hero-sub" id="hero-summary">Loading…</p>
+        </div>
+
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <div class="hero-num" id="stat-total">—</div>
+            <div class="hero-label">ped &amp; bike crashes</div>
+            <div class="hero-sub-label" id="stat-years-label">in Jasper County</div>
+          </div>
+          <div class="hero-stat hero-stat--fatal">
+            <div class="hero-num" id="stat-fatal">—</div>
+            <div class="hero-label">people killed</div>
+            <div class="hero-sub-label">fatalities</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-num" id="stat-injured">—</div>
+            <div class="hero-label">people injured</div>
+            <div class="hero-sub-label">non-fatal injuries</div>
+          </div>
+          <div class="hero-stat hero-stat--accent">
+            <div class="hero-num" id="stat-days-since">—</div>
+            <div class="hero-label">days since last fatality</div>
+            <div class="hero-sub-label" id="stat-last-fatal-date"></div>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-header">
+            <h2 class="chart-title">Crashes by Year</h2>
+            <p class="chart-desc">Stacked by outcome severity. The trend reveals whether Joplin's streets are getting safer.</p>
+          </div>
+          <div class="chart-wrap chart-wrap--bar">
+            <canvas id="chart-year"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================ TAB 2: WHEN -->
+    <section id="tab-when" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-inner">
+
+        <div class="tab-header">
+          <h2>When do crashes happen?</h2>
+          <p>Time patterns reveal which hours and seasons are most dangerous — and why lighting matters.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Time of Day &amp; Day of Week</h3>
+              <p class="chart-desc">Darker cells = more crashes. The late-afternoon commute window stands out.</p>
+            </div>
+            <div id="heatmap-container" class="heatmap-container"></div>
+          </div>
+
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Lighting Condition</h3>
+              <p class="chart-desc">How many crashes happened in darkness vs. daylight.</p>
+            </div>
+            <div class="chart-wrap chart-wrap--donut">
+              <canvas id="chart-lighting"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Crashes by Month</h3>
+              <p class="chart-desc">Stacked by severity. Summer walking and cycling season shows elevated risk.</p>
+            </div>
+            <div class="chart-wrap chart-wrap--bar">
+              <canvas id="chart-monthly"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Pedestrian vs. Bicycle — Year Over Year</h3>
+              <p class="chart-desc">Are crash numbers trending up or down for each mode?</p>
+            </div>
+            <div class="chart-wrap chart-wrap--bar">
+              <canvas id="chart-year-type"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================ TAB 3: WHERE -->
+    <section id="tab-where" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-inner panel-inner--wide">
+
+        <div class="tab-header">
+          <h2>Where do crashes happen?</h2>
+          <p>Every dot is a real crash with GPS coordinates from the MSHP STARS database. Red = fatal, amber = injury, grey = property damage only.</p>
+        </div>
+
+        <div class="where-layout">
+          <div class="where-map-col">
+            <div id="map-where" class="dash-map"></div>
+            <div class="map-legend">
+              <span class="legend-dot legend-dot--fatal"></span> Fatal
+              <span class="legend-dot legend-dot--injury"></span> Injury
+              <span class="legend-dot legend-dot--pdo"></span> Property damage
+            </div>
+          </div>
+          <div class="where-tables-col">
+            <div class="chart-section">
+              <h3 class="chart-title">Top Intersections</h3>
+              <p class="chart-desc">Auto-clustered by GPS location (crashes within ~30 m of each other).</p>
+              <table class="rank-table" id="table-intersections">
+                <thead><tr><th>#</th><th>Location</th><th>Crashes</th><th>Fatalities</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="chart-section" style="margin-top:24px">
+              <h3 class="chart-title">Top Corridors</h3>
+              <p class="chart-desc">Street segments with the most recorded crashes.</p>
+              <div class="chart-wrap chart-wrap--hbar">
+                <canvas id="chart-corridors"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================ TAB 4: WHO & HOW -->
+    <section id="tab-who" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-inner">
+
+        <div class="tab-header">
+          <h2>Who is involved, and how bad is it?</h2>
+          <p>Pedestrians bear the worst outcomes per crash. Contributing factors reveal what's driving the danger.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Pedestrian vs. Bicycle</h3>
+              <p class="chart-desc">Share of crashes and outcomes by mode.</p>
+            </div>
+            <div class="chart-wrap chart-wrap--donut">
+              <canvas id="chart-type-donut"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Outcomes by Mode</h3>
+              <p class="chart-desc">% of crashes resulting in each severity — pedestrian crashes are disproportionately fatal.</p>
+            </div>
+            <div class="chart-wrap chart-wrap--bar">
+              <canvas id="chart-severity-mode"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Contributing Factors</h3>
+              <p class="chart-desc">% of crashes where each factor was flagged. "Unknown" responses are excluded.</p>
+            </div>
+            <div class="chart-wrap chart-wrap--hbar">
+              <canvas id="chart-factors"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <div class="chart-header">
+              <h3 class="chart-title">Crashes by Day of Week</h3>
+              <p class="chart-desc">Pedestrian and bicycle patterns differ — weekday commutes vs. weekend recreation.</p>
+            </div>
+            <div class="chart-wrap chart-wrap--bar">
+              <canvas id="chart-weekday"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================ TAB 5: RISK & EQUITY -->
+    <section id="tab-risk" class="tab-panel" role="tabpanel" hidden>
+      <div class="panel-inner panel-inner--wide">
+
+        <div class="tab-header">
+          <h2>Where is the need greatest?</h2>
+          <p>Crash hotspots mapped against existing bike infrastructure — and which schools have the most dangerous walksheds.</p>
+        </div>
+
+        <!-- Headline stat -->
+        <div class="callout-banner" id="callout-no-facility">
+          <div class="callout-number" id="no-facility-pct">…</div>
+          <div class="callout-text">
+            <strong>of crashes occurred on streets with no nearby bike infrastructure</strong> (within 50 m of a marked lane or trail). These are streets where people are walking and cycling with no protection and no designated space.
+          </div>
+        </div>
+
+        <div class="risk-layout">
+          <div class="risk-map-col">
+            <div id="map-risk" class="dash-map"></div>
+            <div class="map-legend">
+              <span class="legend-line legend-line--trail"></span> Trails &amp; sidewalk lanes
+              <span class="legend-line legend-line--road"></span> On-street lanes
+              <span class="legend-dot legend-dot--fatal"></span> Fatal crash
+              <span class="legend-dot legend-dot--injury"></span> Injury crash
+            </div>
+            <p class="map-note" id="risk-map-note">Loading bike infrastructure…</p>
+          </div>
+          <div class="risk-table-col">
+            <div class="chart-section">
+              <h3 class="chart-title">Schools by Crash Density in Walk Zone</h3>
+              <p class="chart-desc">Ped + bike crashes within ¼ mile of each school. These students walk or ride in the most dangerous walksheds.</p>
+              <div id="school-loading" class="loading-inline">Loading school data…</div>
+              <div class="chart-wrap chart-wrap--hbar" id="school-chart-wrap" style="display:none">
+                <canvas id="chart-schools"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer id="dash-footer">
+    <div class="footer-inner">
+      <span>Data: <a href="https://www.mshp.dps.missouri.gov/TR15Map/Search" target="_blank" rel="noopener">MSHP STARS</a> · Jasper County, MO · pedestrian &amp; bicycle crashes</span>
+      <span class="footer-dot"></span>
+      <span>Bike infrastructure: <a href="https://www.joplingis.org" target="_blank" rel="noopener">City of Joplin GIS</a> (2024)</span>
+      <span class="footer-dot"></span>
+      <span>Schools: <a href="https://nces.ed.gov" target="_blank" rel="noopener">NCES EDGE 2023-24</a></span>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="dashboard.js"></script>
+
+</body>
+</html>
