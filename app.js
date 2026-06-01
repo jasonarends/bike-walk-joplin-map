@@ -9,7 +9,11 @@ const SUPABASE_KEY = 'sb_publishable_bG7sx_kuaCwefhByYTB80Q_rsNE5gbX';
 const DATA_SOURCES = {
   jatsoPoints: 'https://services6.arcgis.com/6TZ2wV0tqNiq5bdQ/arcgis/rest/services/BikePedInput_Jatso/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
   jatsoLines:  'https://services6.arcgis.com/6TZ2wV0tqNiq5bdQ/arcgis/rest/services/BikePedInput_Line/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
-  bikeInfra: 'https://services1.arcgis.com/5olyYd7fCfTTiVp8/ArcGIS/rest/services/JATSO_Bike_Paths/FeatureServer/4/query?where=1%3D1&outFields=*&f=geojson',
+  // City of Joplin's authoritative bike lane inventory (2024), split into two sublayers.
+  // The old JATSO_Bike_Paths FeatureServer republished sublayer 0 (sidewalk lanes) only —
+  // we go straight to the source so we also get the on-road lanes (sublayer 1).
+  cityBikeLanesSidewalk: 'https://www.joplingis.org/server/rest/services/Bike_Lanes/Bike_Lanes_mxd_2024/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson',
+  cityBikeLanesRoad:     'https://www.joplingis.org/server/rest/services/Bike_Lanes/Bike_Lanes_mxd_2024/MapServer/1/query?where=1%3D1&outFields=*&outSR=4326&f=geojson',
   // NCES EDGE 2023-24 school geocodes — authoritative federal data, updated annually
   schools:   'https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_GEOCODE_PUBLICSCH_2324/MapServer/0/query?where=CITY+%3D+%27JOPLIN%27+AND+STATE+%3D+%27MO%27&outFields=*&f=geojson',
 };
@@ -98,16 +102,14 @@ async function loadAllLayers() {
   const results = await Promise.allSettled([
     loadJatsoPoints(),
     loadJatsoLines(),
-    loadBikeInfra(),
+    loadCityBikeLanes(),
   ]);
   hideLoading();
   updateStats();
-  const names = ['JATSO reports', 'JATSO routes', 'bike infrastructure'];
+  const names = ['JATSO reports', 'JATSO routes', 'city bike lanes'];
   results.forEach((r,i) => {
     if (r.status === 'rejected') {
       console.warn(`Failed to load ${names[i]}:`, r.reason);
-      // Only show toast for infra since it has an uncertain URL; others are confirmed
-      if (i === 2) showToast('Bike infrastructure layer unavailable — check URL in app.js', 'info');
     }
   });
 }
@@ -143,22 +145,53 @@ async function loadJatsoLines() {
   return data.features.length;
 }
 
-async function loadBikeInfra() {
-  const data = await fetchGeoJSON(DATA_SOURCES.bikeInfra);
+// ---- City of Joplin bike infrastructure (2024) ----
+// Sublayer 0: lanes on sidewalks + off-street trails (Frisco, Turkey Creek, MSSU, Wild Cat, Mercy Park)
+// Sublayer 1: on-street painted lanes (Broadway, Main, Zora, Connecticut, etc.)
+// Loaded as one combined "infra" group so the existing toggle/stat ("Bike Facilities") still works.
+async function loadCityBikeLanes() {
+  const [sidewalk, road] = await Promise.all([
+    fetchGeoJSON(DATA_SOURCES.cityBikeLanesSidewalk),
+    fetchGeoJSON(DATA_SOURCES.cityBikeLanesRoad),
+  ]);
   const group = L.featureGroup();
-  data.features.forEach(f => {
+
+  // Sidewalk sublayer — includes trails. Trail features have "Trail" in StreetName.
+  (sidewalk.features || []).forEach(f => {
     if (!f.geometry) return;
-    const p = f.properties || {};
-    const name = p.StreetName || p.RoadName || 'Unnamed';
-    const badges = [p.LaneType || p.Lane_Designator, p.SurfaceType, p.Status].filter(Boolean);
     const coords = geoJsonCoordsToLatLng(f.geometry);
     if (!coords) return;
-    L.polyline(coords, { color: '#1cc760', weight: 4, opacity: 0.85 })
-      .bindPopup(makePopup('Existing Bike Facility', 'type-infra', name, badges), { maxWidth: 280 })
+    const p = f.properties || {};
+    const name = p.StreetName || 'Unnamed';
+    const isTrail = /trail/i.test(name);
+    const badges = [
+      isTrail ? 'Off-street trail' : 'Sidewalk lane',
+      p.LaneType, p.SurfaceType, p.Status,
+    ].filter(Boolean);
+    L.polyline(coords, {
+      color: isTrail ? '#16a34a' : '#14b8a6',
+      weight: 4, opacity: 0.9,
+      dashArray: isTrail ? null : '6 4',
+    })
+      .bindPopup(makePopup(isTrail ? 'Off-street Trail' : 'Sidewalk Bike Lane', 'type-infra', name, badges), { maxWidth: 280 })
       .addTo(group);
   });
+
+  // Road sublayer — on-street painted lanes. Uses RoadName, not StreetName.
+  (road.features || []).forEach(f => {
+    if (!f.geometry) return;
+    const coords = geoJsonCoordsToLatLng(f.geometry);
+    if (!coords) return;
+    const p = f.properties || {};
+    const name = p.RoadName || 'Unnamed segment';
+    const badges = ['On-street lane', p.Type, p.Lane_Designator && `Direction ${p.Lane_Designator}`].filter(Boolean);
+    L.polyline(coords, { color: '#0d9488', weight: 4, opacity: 0.9 })
+      .bindPopup(makePopup('On-street Bike Lane', 'type-infra', name, badges), { maxWidth: 280 })
+      .addTo(group);
+  });
+
   layerGroups.infra = group.addTo(map);
-  return data.features.length;
+  return (sidewalk.features?.length || 0) + (road.features?.length || 0);
 }
 
 // ---- Load BWJ community reports from Supabase ----
@@ -332,6 +365,7 @@ function closeMetaPanel() {
   document.getElementById('meta-panel').setAttribute('aria-hidden', 'true');
   document.getElementById('overlay').classList.remove('active');
   document.getElementById('add-btn').classList.remove('hidden');
+  document.body.classList.remove('mobile-flow');
 }
 
 function discardDrawing() {
@@ -357,8 +391,10 @@ async function saveReport() {
 
   const geojson = pendingLayer.toGeoJSON().geometry;
   const issues  = [...document.querySelectorAll('#issue-checks input:checked')].map(i => i.value);
+  const photoUrl = await uploadPhotoIfPresent();
 
   const payload = {
+    photo_url:       photoUrl,
     geojson,
     geom_type:       geojson.type,
     submission_type: formState.type,
@@ -430,6 +466,88 @@ function resetFormFields() {
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-placeholder').style.display = '';
   updateConditionalFields();
+}
+
+// ---- Mobile "Report from My Location" flow ----
+// SUPABASE SETUP (one-time, manual in dashboard):
+//   1. Storage → New bucket: name `report-photos`, set Public.
+//   2. SQL editor: ALTER TABLE reports ADD COLUMN photo_url text;
+// Until those exist, photo uploads will fail silently and the report still saves.
+const PHOTO_BUCKET = 'report-photos';
+
+function isMobileDevice() {
+  return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 640;
+}
+
+function initMobileReport() {
+  const gpsBtn = document.getElementById('gps-report-btn');
+  if (!gpsBtn) return;
+
+  gpsBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation not supported on this device', 'error');
+      return;
+    }
+    gpsBtn.disabled = true;
+    const labelEl = gpsBtn.querySelector('span');
+    const original = labelEl.textContent;
+    labelEl.textContent = 'Locating…';
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gpsBtn.disabled = false;
+        labelEl.textContent = original;
+        startMobileReportAt(pos.coords.latitude, pos.coords.longitude);
+      },
+      err => {
+        gpsBtn.disabled = false;
+        labelEl.textContent = original;
+        const msg = err.code === 1
+          ? 'Location permission denied. Enable it in your browser settings to drop a pin here.'
+          : err.code === 3
+          ? 'Location request timed out. Try again outdoors.'
+          : 'Could not determine your location.';
+        showToast(msg, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+}
+
+function startMobileReportAt(lat, lng) {
+  pendingLayer = L.marker([lat, lng], { icon: ICONS.bwj });
+  pendingLayer.addTo(map);
+  map.setView([lat, lng], Math.max(map.getZoom(), 17));
+
+  document.body.classList.add('mobile-flow');
+  document.getElementById('drawn-shape-icon').textContent  = '📍';
+  document.getElementById('drawn-shape-label').textContent = 'Your location';
+
+  openMetaPanel();
+}
+
+async function uploadPhotoIfPresent() {
+  const input = document.getElementById('photo-input');
+  const file = input?.files?.[0];
+  if (!file) return null;
+
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  try {
+    const { error } = await db.storage.from(PHOTO_BUCKET).upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type || 'image/jpeg',
+    });
+    if (error) throw error;
+    const { data } = db.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (err) {
+    console.warn('Photo upload failed (bucket may not exist yet):', err);
+    showToast('Photo upload failed — report saved without photo', 'info');
+    return null;
+  }
 }
 
 // ---- Photo upload ----
@@ -722,6 +840,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initLayerToggles();
   initDrawToolbar();
   initMetaPanel();
+  initMobileReport();
   initModal();
   initStravaLayer();  // probe for tiles, enables toggle if present
   initCrashLayer();   // probe for data/crashes.geojson, shows toggle if present
