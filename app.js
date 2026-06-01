@@ -550,6 +550,84 @@ async function uploadPhotoIfPresent() {
   }
 }
 
+// ---- Mobile "Report from My Location" flow ----
+// SUPABASE SETUP (one-time, manual in dashboard):
+//   1. Storage → New bucket: name `report-photos`, set Public.
+//   2. SQL editor: ALTER TABLE reports ADD COLUMN photo_url text;
+// Until those exist, photo uploads will fail silently and the report still saves.
+const PHOTO_BUCKET = 'report-photos';
+
+function initMobileReport() {
+  const gpsBtn = document.getElementById('gps-report-btn');
+  if (!gpsBtn) return;
+
+  gpsBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation not supported on this device', 'error');
+      return;
+    }
+    gpsBtn.disabled = true;
+    const labelEl = gpsBtn.querySelector('span');
+    const original = labelEl.textContent;
+    labelEl.textContent = 'Locating…';
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gpsBtn.disabled = false;
+        labelEl.textContent = original;
+        startMobileReportAt(pos.coords.latitude, pos.coords.longitude);
+      },
+      err => {
+        gpsBtn.disabled = false;
+        labelEl.textContent = original;
+        const msg = err.code === 1
+          ? 'Location permission denied. Enable it in your browser settings to drop a pin here.'
+          : err.code === 3
+          ? 'Location request timed out. Try again outdoors.'
+          : 'Could not determine your location.';
+        showToast(msg, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+}
+
+function startMobileReportAt(lat, lng) {
+  pendingLayer = L.marker([lat, lng], { icon: ICONS.bwj });
+  pendingLayer.addTo(map);
+  map.setView([lat, lng], Math.max(map.getZoom(), 17));
+
+  document.body.classList.add('mobile-flow');
+  document.getElementById('drawn-shape-icon').textContent  = '📍';
+  document.getElementById('drawn-shape-label').textContent = 'Your location';
+
+  openMetaPanel();
+}
+
+async function uploadPhotoIfPresent() {
+  const input = document.getElementById('photo-input');
+  const file = input?.files?.[0];
+  if (!file) return null;
+
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  try {
+    const { error } = await db.storage.from(PHOTO_BUCKET).upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type || 'image/jpeg',
+    });
+    if (error) throw error;
+    const { data } = db.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (err) {
+    console.warn('Photo upload failed (bucket may not exist yet):', err);
+    showToast('Photo upload failed — report saved without photo', 'info');
+    return null;
+  }
+}
+
 // ---- Photo upload ----
 function initPhotoUpload() {
   const area        = document.getElementById('photo-upload-area');

@@ -362,6 +362,24 @@ body.drawing-mode #map { cursor: crosshair !important; }
 .report-fab:active { transform: translateX(-50%) scale(0.98); }
 .report-fab.hidden { opacity: 0; pointer-events: none; }
 
+/* GPS "Report Here" FAB — only shown on touch / mobile devices */
+.gps-fab { display: none; background: var(--green, #1cc760); color: #fff; }
+.gps-fab:hover { background: #16a851; }
+@media (pointer: coarse), (max-width: 640px) {
+  /* ID-level specificity so it beats the .report-fab { bottom:14px } in the mobile block below */
+  #gps-report-btn.gps-fab { display: flex; bottom: 64px; }
+}
+
+/* Mobile-flow form: hide desktop-only fields when launched via GPS button */
+body.mobile-flow .desktop-only-field { display: none !important; }
+
+/* Touch-friendly tap targets in mobile flow */
+@media (pointer: coarse), (max-width: 640px) {
+  .choice-btn, .choice-pill, .severity-btn, .btn-primary, .btn-secondary,
+  .panel-icon-btn, .draw-tool-btn, .check-item { min-height: 44px; }
+  .photo-placeholder { min-height: 88px; }
+}
+
 /* ---- Metadata / Form Panel ---- */
 .form-panel {
   position: fixed; top: var(--chrome-h); right: 0; bottom: 0;
