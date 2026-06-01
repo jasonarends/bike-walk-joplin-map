@@ -697,6 +697,23 @@ async function initCrashLayer() {
   } catch { /* file not present */ }
 }
 
+// Render thousands of individual crash points on a single Canvas surface;
+// SVG markers would tank the framerate at this scale.
+const crashCanvas = L.canvas({ padding: 0.5 });
+
+// Severity → color. STARS values: "Fatal", "Personal Injury", "Property Damage"
+function crashStyle(props) {
+  const sev = (props.SEVERITY || '').toLowerCase();
+  if (sev.startsWith('fatal'))    return { color: '#8b0000', radius: 5, weight: 1.5 };
+  if (sev.startsWith('personal')) return { color: '#e8453c', radius: 4, weight: 1   };
+  return                                  { color: '#888',    radius: 2.5, weight: 0.5 };
+}
+
+function cleanStreet(s) {
+  if (!s) return '';
+  return String(s).replace(/^(CST|CRD|ALY|PVT|PP|RP|WS|SOR|WOR|NOR)\s+/i, '').trim();
+}
+
 async function loadCrashes() {
   if (layerGroups.crashes) { layerGroups.crashes.addTo(map); return; }
   showToast('Loading crash data…', 'info');
@@ -706,37 +723,51 @@ async function loadCrashes() {
     const group = L.featureGroup();
 
     (data.features || []).forEach(f => {
-      const p   = f.properties;
+      const p = f.properties || {};
       const [lng, lat] = f.geometry.coordinates;
+      const s = crashStyle(p);
 
-      // Scale circle radius by crash count (min 8m, max 40m)
-      const r = Math.min(8 + p.total * 1.5, 40);
-      const isFatal = p.fatal > 0;
+      const on = cleanStreet(p.ON_STREET);
+      const at = cleanStreet(p.AT_STREET);
+      const label = on && at ? `${on} ${p.INTER_LOC || '@'} ${at}` : (on || at || 'Unknown location');
+
+      const flags = [
+        p.DR_DRINK?.trim()  === 'Y' ? 'alcohol' : null,
+        p.DR_DRUG?.trim()   === 'Y' ? 'drugs'   : null,
+        p.SPEED?.trim()     === 'Y' ? 'speed'   : null,
+        p.CELL_PHONE?.trim()=== 'Y' ? 'phone'   : null,
+        p.TEXTING?.trim()   === 'Y' ? 'texting' : null,
+      ].filter(Boolean);
 
       L.circleMarker([lat, lng], {
-        radius: r,
-        color:       isFatal ? '#8b0000' : '#e8453c',
-        fillColor:   isFatal ? '#8b0000' : '#e8453c',
-        fillOpacity: 0.55,
-        weight:      isFatal ? 2 : 1,
-        opacity:     0.8,
+        renderer:    crashCanvas,
+        radius:      s.radius,
+        color:       s.color,
+        fillColor:   s.color,
+        fillOpacity: 0.65,
+        weight:      s.weight,
+        opacity:     0.85,
       })
         .bindPopup(makePopup(
-          'Crash Hotspot', 'type-crash',
-          p.label,
+          p.ACC_TYPE || 'Crash', 'type-crash',
+          label,
           [
-            `${p.total} crashes`,
-            p.pedestrian ? `${p.pedestrian} pedestrian` : null,
-            p.bicycle    ? `${p.bicycle} bicycle` : null,
-            p.fatal      ? `⚠ ${p.fatal} fatal` : null,
-            p.years,
+            `${p.ACC_DATE || ''} ${p.ACC_TIME || ''}`.trim() || null,
+            p.CITY ? `City: ${p.CITY}` : null,
+            `Severity: ${p.SEVERITY || 'Unknown'}`,
+            p.INJURED ? `${p.INJURED} injured` : null,
+            p.KILLED  ? `⚠ ${p.KILLED} killed` : null,
+            flags.length ? `Factors: ${flags.join(', ')}` : null,
+            p.LIGHT_COND ? `Light: ${p.LIGHT_COND}` : null,
           ].filter(Boolean)
-        ), { maxWidth: 260 })
+        ), { maxWidth: 280 })
         .addTo(group);
     });
 
     layerGroups.crashes = group.addTo(map);
-    showToast(`Loaded ${(data.features || []).length} crash locations`, 'success');
+    const meta = data.metadata || {};
+    const note = meta.where?.includes("Pedestrian") ? ' (ped/bike)' : '';
+    showToast(`Loaded ${(data.features || []).length.toLocaleString()} crashes${note}`, 'success');
   } catch (err) {
     console.error('Crash data failed:', err);
     showToast('Could not load crash data', 'error');
