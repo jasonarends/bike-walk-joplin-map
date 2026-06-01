@@ -3,25 +3,22 @@
 Download Strava global heatmap tiles for the Joplin, MO area.
 Saves them as static files — no token refresh ever needed again.
 
-HOW TO GET YOUR COOKIES (new Strava format as of 2026)
-───────────────────────────────────────────────────────
-Auth is now sent as cookies, not URL parameters.
+HOW TO GET YOUR FULL COOKIE STRING (Strava format as of 2026)
+─────────────────────────────────────────────────────────────
+Auth is sent via cookies. You need the entire Cookie header value.
 
 1. Log into strava.com in Firefox or Chrome
 2. Go to: https://www.strava.com/maps/global-heatmap
-3. Open DevTools → Network tab → filter or search for "content-"
+3. Open DevTools → Network tab → filter for "content-"
 4. Pan the map to trigger tile loads, click any PNG request
-5. In the request, scroll to the Cookie header — copy the values of:
-      CloudFront-Key-Pair-Id
-      CloudFront-Policy
-      CloudFront-Signature
+5. In the request headers, find the "Cookie:" line
+6. Copy the ENTIRE value (it's one long string with semicolons between values)
+   It will contain: _strava4_session=...; CloudFront-Key-Pair-Id=...; CloudFront-Policy=...; CloudFront-Signature=...
 
 USAGE
 ─────
     python3 scripts/download_strava_tiles.py \\
-        --key-pair-id "K3VK9UFQYD04PI" \\
-        --policy      "eyJTdGF0ZW1lbnQi..." \\
-        --signature   "FAl9QULLQ8PE..."
+        --cookies "_strava4_session=abc123; CloudFront-Key-Pair-Id=K3VK9...; CloudFront-Policy=eyJ...; CloudFront-Signature=FAl9..."
 
     # Preview tile counts without downloading:
     python3 scripts/download_strava_tiles.py ... --dry-run
@@ -54,7 +51,7 @@ from pathlib import Path
 # ── Joplin metro bounding box ──────────────────────────────────────────────
 DEFAULT_BBOX = {'south': 36.95, 'north': 37.20, 'west': -94.65, 'east': -94.42}
 
-HOSTS = ['content-a', 'content-b', 'content-c']
+HOSTS = ['content-a']   # b/c may not resolve outside strava.com's own network
 
 TILE_URL = (
     'https://{host}.strava.com/identified/globalheat'
@@ -81,7 +78,7 @@ def tile_ranges(bbox: dict, z: int):
 
 # ── Download ───────────────────────────────────────────────────────────────
 
-def download_tiles(*, key_pair_id, policy, signature,
+def download_tiles(*, cookies,
                    zoom_min=12, zoom_max=16, activity='Ride', color='hot',
                    bbox=None, dry_run=False):
 
@@ -91,11 +88,7 @@ def download_tiles(*, key_pair_id, policy, signature,
     out_root = Path(__file__).parent.parent / 'tiles' / 'strava'
     out_root.mkdir(parents=True, exist_ok=True)
 
-    cookie = (
-        f'CloudFront-Key-Pair-Id={key_pair_id}; '
-        f'CloudFront-Policy={policy}; '
-        f'CloudFront-Signature={signature}'
-    )
+    cookie = cookies
 
     # ── Plan ─────────────────────────────────────────────────────────────
     plan = []
@@ -229,9 +222,8 @@ def main():
         description='Download Strava heatmap tiles for the Joplin, MO area.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument('--key-pair-id', required=True, metavar='ID')
-    p.add_argument('--policy',      required=True, metavar='STR')
-    p.add_argument('--signature',   required=True, metavar='STR')
+    p.add_argument('--cookies',      required=True, metavar='STR',
+                   help='Full Cookie header value from DevTools (include _strava4_session and all CloudFront values)')
     p.add_argument('--zoom-min',    type=int, default=12, metavar='N')
     p.add_argument('--zoom-max',    type=int, default=16, metavar='N')
     p.add_argument('--activity',    default='Ride',
@@ -248,10 +240,8 @@ def main():
         bbox = {'south': s, 'west': w, 'north': n, 'east': e}
 
     download_tiles(
-        key_pair_id = args.key_pair_id,
-        policy      = args.policy,
-        signature   = args.signature,
-        zoom_min    = args.zoom_min,
+        cookies  = args.cookies,
+        zoom_min = args.zoom_min,
         zoom_max    = args.zoom_max,
         activity    = args.activity,
         color       = args.color,

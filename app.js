@@ -11,7 +11,7 @@ const DATA_SOURCES = {
   jatsoLines:  'https://services6.arcgis.com/6TZ2wV0tqNiq5bdQ/arcgis/rest/services/BikePedInput_Line/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
   bikeInfra: 'https://services1.arcgis.com/5olyYd7fCfTTiVp8/ArcGIS/rest/services/JATSO_Bike_Paths/FeatureServer/4/query?where=1%3D1&outFields=*&f=geojson',
   // NCES EDGE 2023-24 school geocodes — authoritative federal data, updated annually
-  schools:   'https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_GEOCODE_PUBLICSCH_2324/MapServer/0/query?where=CITY+%3D+%27JOPLIN%27+AND+STATE+%3D+%27MO%27&outFields=NAME,STREET,GRADESPAN,STATUS&f=json',
+  schools:   'https://nces.ed.gov/opengis/rest/services/K12_School_Locations/EDGE_GEOCODE_PUBLICSCH_2324/MapServer/0/query?where=CITY+%3D+%27JOPLIN%27+AND+STATE+%3D+%27MO%27&outFields=NAME,STREET,GRADESPAN,STATUS,LAT,LON&f=geojson',
 };
 
 // ---- Supabase client ----
@@ -520,16 +520,14 @@ async function loadSchools() {
     const group = L.featureGroup();
     const zones = L.featureGroup();
 
-    // NCES returns {features: [{attributes: {NAME, STREET, LAT, LON, ...}}]}
-    // geometry.x/y also available but attribute LAT/LON is clearer
+    // NCES returns GeoJSON: {features: [{geometry: {coordinates: [lon, lat]}, properties: {NAME, ...}}]}
     (data.features || []).forEach(f => {
-      const a    = f.attributes;
-      const lat  = a.LAT  ?? f.geometry?.y;
-      const lon  = a.LON  ?? f.geometry?.x;
+      const p   = f.properties;
+      const [lon, lat] = f.geometry.coordinates;
       if (!lat || !lon) return;
 
-      const name  = a.NAME  ? toTitleCase(a.NAME)  : 'School';
-      const grade = a.GRADESPAN ? `Grades ${a.GRADESPAN}` : '';
+      const name  = p.NAME  ? toTitleCase(p.NAME)  : 'School';
+      const grade = p.GRADESPAN ? `Grades ${p.GRADESPAN}` : '';
 
       L.circle([lat, lon], {
         radius: 1609, color: '#1370AF', fillColor: '#1370AF',
@@ -548,7 +546,7 @@ async function loadSchools() {
 
     layerGroups.schoolZones = zones.addTo(map);
     layerGroups.schools     = group.addTo(map);
-    showToast(`Loaded ${data.features.length} schools`, 'success');
+    showToast(`Loaded ${(data.features || []).length} schools`, 'success');
   } catch (err) {
     console.error('Schools failed:', err);
     showToast('Could not load school data', 'error');
@@ -565,6 +563,67 @@ function removeSchools() {
   if (layerGroups.schoolZones) map.removeLayer(layerGroups.schoolZones);
 }
 
+// ---- Crash hotspots layer ----
+async function initCrashLayer() {
+  try {
+    const res = await fetch('data/crashes.geojson', { method: 'HEAD' });
+    if (res.ok) {
+      document.getElementById('crashes-layer-item').style.display = '';
+    }
+  } catch { /* file not present */ }
+}
+
+async function loadCrashes() {
+  if (layerGroups.crashes) { layerGroups.crashes.addTo(map); return; }
+  showToast('Loading crash data…', 'info');
+  try {
+    const res  = await fetch('data/crashes.geojson');
+    const data = await res.json();
+    const group = L.featureGroup();
+
+    data.features.forEach(f => {
+      const p   = f.properties;
+      const [lng, lat] = f.geometry.coordinates;
+
+      // Scale circle radius by crash count (min 8m, max 40m)
+      const r = Math.min(8 + p.total * 1.5, 40);
+      const isFatal = p.fatal > 0;
+
+      L.circleMarker([lat, lng], {
+        radius: r,
+        color:       isFatal ? '#8b0000' : '#e8453c',
+        fillColor:   isFatal ? '#8b0000' : '#e8453c',
+        fillOpacity: 0.55,
+        weight:      isFatal ? 2 : 1,
+        opacity:     0.8,
+      })
+        .bindPopup(makePopup(
+          'Crash Hotspot', 'type-crash',
+          `<strong>${p.label}</strong>`,
+          [
+            `${p.total} crashes`,
+            p.pedestrian ? `${p.pedestrian} pedestrian` : null,
+            p.bicycle    ? `${p.bicycle} bicycle` : null,
+            p.fatal      ? `⚠ ${p.fatal} fatal` : null,
+            p.years,
+          ].filter(Boolean)
+        ), { maxWidth: 260 })
+        .addTo(group);
+    });
+
+    layerGroups.crashes = group.addTo(map);
+    showToast(`Loaded ${data.features.length} crash locations`, 'success');
+  } catch (err) {
+    console.error('Crash data failed:', err);
+    showToast('Could not load crash data', 'error');
+    document.getElementById('toggle-crashes').checked = false;
+  }
+}
+
+function removeCrashes() {
+  if (layerGroups.crashes) map.removeLayer(layerGroups.crashes);
+}
+
 // ---- Layer toggles ----
 function initLayerToggles() {
   const simple = { 'toggle-points': 'points', 'toggle-lines': 'lines', 'toggle-infra': 'infra', 'toggle-bwj': 'bwj' };
@@ -576,6 +635,9 @@ function initLayerToggles() {
   });
   document.getElementById('toggle-schools')?.addEventListener('change', e => {
     e.target.checked ? loadSchools() : removeSchools();
+  });
+  document.getElementById('toggle-crashes')?.addEventListener('change', e => {
+    e.target.checked ? loadCrashes() : removeCrashes();
   });
   document.getElementById('toggle-strava')?.addEventListener('change', e => {
     e.target.checked ? addStravaLayer() : removeStravaLayer();
@@ -656,4 +718,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initMetaPanel();
   initModal();
   initStravaLayer();  // probe for tiles, enables toggle if present
+  initCrashLayer();   // probe for data/crashes.geojson, shows toggle if present
 });

@@ -169,6 +169,7 @@ html, body {
 .popup-type.type-infra  { color: var(--blue-light); }
 .popup-type.type-bwj    { color: var(--amber); }
 .popup-type.type-school { color: var(--blue); }
+.popup-type.type-crash  { color: #e8453c; }
 .popup-comment { font-size: 13px; line-height: 1.55; color: var(--text-on-dark); }
 .popup-meta {
   margin-top: 9px; padding-top: 9px;
