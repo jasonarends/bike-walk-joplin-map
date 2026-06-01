@@ -2,6 +2,15 @@
 
 Community-powered bike and pedestrian safety map for Joplin, MO. Built with Leaflet.js + OpenStreetMap, live data from JATSO/ArcGIS, hosted on GitHub Pages.
 
+## Pages
+
+| File | Description |
+|---|---|
+| `index.html` | Interactive community safety map |
+| `dashboard.html` | 10-year crash data dashboard (5 tabs: Overview, When, Where, Who & How, Risk & Equity) |
+
+The dashboard reads `data/crashes.geojson` directly — re-run `scripts/fetch_crashes.py` to refresh it, and the dashboard updates automatically on next page load.
+
 ## Features
 
 - Live JATSO data (point reports, route suggestions, existing bike facilities) via ArcGIS REST API
