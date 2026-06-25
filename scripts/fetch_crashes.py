@@ -22,11 +22,12 @@ data/crashes.geojson — one Feature per crash, consumed by app.js.
 
 USAGE
 ─────
-  python3 scripts/fetch_crashes.py              # default: last 10 yrs, Jasper, ped + bike
-  python3 scripts/fetch_crashes.py --all-types  # include every ACC_TYPE (much larger)
-  python3 scripts/fetch_crashes.py --years 5    # shorter window
+  python3 scripts/fetch_crashes.py                   # default: last 10 yrs, Jasper, ped + bike
+  python3 scripts/fetch_crashes.py --all-types       # include every ACC_TYPE (much larger)
+  python3 scripts/fetch_crashes.py --years 5         # shorter rolling window
+  python3 scripts/fetch_crashes.py --since 2018-01-01  # fixed start date instead of rolling
   python3 scripts/fetch_crashes.py --city JOPLIN
-  python3 scripts/fetch_crashes.py --dry-run    # count only, no file write
+  python3 scripts/fetch_crashes.py --dry-run         # count only, no file write
 
 REQUIREMENTS
 ────────────
@@ -85,8 +86,8 @@ KEEP_FIELDS = [
 ]
 
 
-def build_where(years: int, city: str | None, ped_bike: bool) -> str:
-    cutoff = (dt.date.today() - dt.timedelta(days=365 * years)).isoformat()
+def build_where(years: int, since: dt.date | None, city: str | None, ped_bike: bool) -> str:
+    cutoff = (since or (dt.date.today() - dt.timedelta(days=365 * years))).isoformat()
     clauses = [
         "COUNTY='JASPER'",
         f"ACC_DATE >= DATE '{cutoff}'",
@@ -156,7 +157,11 @@ def normalize_feature(f: dict) -> dict | None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    p.add_argument("--years", type=int, default=10, help="Lookback window in years (default: 10)")
+    window = p.add_mutually_exclusive_group()
+    window.add_argument("--years", type=int, default=10,
+                        help="Rolling lookback window in years (default: 10)")
+    window.add_argument("--since", type=dt.date.fromisoformat, metavar="YYYY-MM-DD",
+                        help="Fixed start date (overrides --years)")
     p.add_argument("--city", help="Restrict to one city (e.g. JOPLIN)")
     p.add_argument("--all-types", action="store_true",
                    help="Include every ACC_TYPE (default filters to Pedestrian + Pedalcycle)")
@@ -166,7 +171,7 @@ def main() -> int:
                    help=f"Output path (default: {OUTPUT_PATH})")
     args = p.parse_args()
 
-    where = build_where(args.years, args.city, ped_bike=not args.all_types)
+    where = build_where(args.years, args.since, args.city, ped_bike=not args.all_types)
     print(f"WHERE  {where}")
 
     total = query_count(where)

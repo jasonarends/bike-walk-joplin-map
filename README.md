@@ -11,6 +11,32 @@ Community-powered bike and pedestrian safety map for Joplin, MO. Built with Leaf
 
 The dashboard reads `data/crashes.geojson` directly — re-run `scripts/fetch_crashes.py` to refresh it, and the dashboard updates automatically on next page load.
 
+### Automated refresh (cron)
+
+On an always-on machine:
+
+```bash
+git clone git@github.com:jasonarends/bike-walk-joplin-map.git ~/repos/bike-walk-joplin-map
+cd ~/repos/bike-walk-joplin-map
+git config user.name  "BWJ Data Bot"
+git config user.email "your-bot@example.com"
+pip3 install --user requests
+```
+
+Add to `crontab -e` (twice weekly, well under Supabase's 7-day pause threshold):
+
+```cron
+15 4 * * 1,4  cd ~/repos/bike-walk-joplin-map && scripts/update_crashes.sh >> ~/bwj-update.log 2>&1
+```
+
+`scripts/update_crashes.sh` runs `git pull → fetch → commit-if-changed → push`, then pings the Supabase REST API to keep the project from auto-pausing.
+
+By default the fetch is a **rolling 10-year window**. For a fixed start date, pass `--since`:
+
+```cron
+15 4 * * 1,4  cd ~/repos/bike-walk-joplin-map && scripts/update_crashes.sh --since 2018-01-01 >> ~/bwj-update.log 2>&1
+```
+
 ## Features
 
 - Live JATSO data (point reports, route suggestions, existing bike facilities) via ArcGIS REST API
