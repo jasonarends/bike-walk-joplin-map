@@ -11,8 +11,9 @@
 #
 # What it does:
 #   1. git pull --ff-only  (so we never push on top of someone else's changes)
-#   2. run scripts/fetch_crashes.py with any args you pass through
-#   3. if data/crashes.geojson actually changed, commit + push
+#   2. run the three fetch scripts: crashes (with passthrough args), bike
+#      facilities, and Joplin schools
+#   3. if any of the data/*.geojson files actually changed, commit + push
 #   4. ping the Supabase REST API to reset the 7-day inactivity timer
 #
 # Exit codes:
@@ -42,13 +43,31 @@ git pull --ff-only
 log "running fetch_crashes.py $*"
 python3 scripts/fetch_crashes.py "$@"
 
-# ── 3. Commit + push if data changed ──────────────────────────────────────
-if git diff --quiet -- data/crashes.geojson; then
-  log "no changes to data/crashes.geojson"
+log "running fetch_bike_facilities.py"
+python3 scripts/fetch_bike_facilities.py || log "WARN: bike facilities fetch failed (keeping stale file)"
+
+log "running fetch_schools.py"
+python3 scripts/fetch_schools.py || log "WARN: schools fetch failed (keeping stale file)"
+
+# ── 3. Commit + push if any data changed ──────────────────────────────────
+data_paths=(
+  data/crashes.geojson
+  data/bike_facilities.geojson
+  data/joplin_schools.geojson
+)
+changed=()
+for p in "${data_paths[@]}"; do
+  if [[ -f "$p" ]] && ! git diff --quiet -- "$p"; then
+    changed+=("$p")
+  fi
+done
+
+if [[ ${#changed[@]} -eq 0 ]]; then
+  log "no data changes"
 else
-  log "data/crashes.geojson changed — committing"
-  git add data/crashes.geojson
-  git commit -m "data: refresh crashes.geojson ($(date -u +%Y-%m-%d))"
+  log "changed: ${changed[*]}"
+  git add "${changed[@]}"
+  git commit -m "data: refresh $(printf '%s, ' "${changed[@]##*/}" | sed 's/, $//') ($(date -u +%Y-%m-%d))"
   git push
   log "pushed"
 fi
