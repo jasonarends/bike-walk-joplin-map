@@ -50,6 +50,17 @@ async function fetchJSON(url) {
   return r.json();
 }
 
+// Try a baked-in local file first (committed by the cron pipeline); if it isn't
+// there or fails to parse, fall back to hitting the live remote endpoint. Keeps
+// the dashboard working even when a cron run is skipped.
+async function fetchLocalOrRemote(localPath, remoteUrl) {
+  try {
+    const r = await fetch(localPath);
+    if (r.ok) return await r.json();
+  } catch { /* fall through */ }
+  return fetchJSON(remoteUrl);
+}
+
 // Haversine distance in metres
 function distM(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -695,13 +706,26 @@ async function initRiskMap(crashes) {
 
   const noteEl = document.getElementById('risk-map-note');
 
-  // Load bike facility layers
-  let facilityPoints = []; // flat array of [lat, lon] for distance checks
+  // Load bike facility layers. Bake-in file is one merged FeatureCollection
+  // with properties._layer ∈ {sidewalk, road}; fall back to two live ArcGIS
+  // calls if the local file isn't published yet.
+  const facilityGrid = new FacilityGrid();
   try {
-    const [sidewalk, road] = await Promise.all([
-      fetchJSON(DATA_SOURCES.cityBikeLanesSidewalk),
-      fetchJSON(DATA_SOURCES.cityBikeLanesRoad),
-    ]);
+    const bakedReq = fetch('data/bike_facilities.geojson');
+    const baked    = await bakedReq.catch(() => ({ ok: false }));
+    let sidewalkFeats, roadFeats;
+    if (baked.ok) {
+      const gj = await baked.json();
+      sidewalkFeats = (gj.features || []).filter(f => f.properties?._layer !== 'road');
+      roadFeats     = (gj.features || []).filter(f => f.properties?._layer === 'road');
+    } else {
+      const [sidewalk, road] = await Promise.all([
+        fetchJSON(DATA_SOURCES.cityBikeLanesSidewalk),
+        fetchJSON(DATA_SOURCES.cityBikeLanesRoad),
+      ]);
+      sidewalkFeats = sidewalk.features || [];
+      roadFeats     = road.features || [];
+    }
 
     const drawLine = (f, color, dashArray) => {
       if (!f.geometry) return;
@@ -709,20 +733,18 @@ async function initRiskMap(crashes) {
       if (!coords) return;
       L.polyline(coords, { color, weight: 3, opacity: 0.85, dashArray })
         .addTo(map);
-      // Sample points every ~20m for proximity check
-      sampleLinePoints(coords, facilityPoints);
+      sampleLinePointsIntoGrid(coords, facilityGrid);
     };
 
-    (sidewalk.features || []).forEach(f => {
+    sidewalkFeats.forEach(f => {
       const isTrail = /trail/i.test(f.properties?.StreetName || '');
       drawLine(f, isTrail ? '#16a34a' : '#14b8a6', isTrail ? null : '6 4');
     });
-    (road.features || []).forEach(f => drawLine(f, '#0d9488', null));
+    roadFeats.forEach(f => drawLine(f, '#0d9488', null));
 
-    noteEl.textContent = `${facilityPoints.length.toLocaleString()} facility sample points loaded`;
+    noteEl.textContent = `${facilityGrid.size.toLocaleString()} facility sample points loaded`;
 
-    // Compute % crashes without nearby facility
-    computeFacilityGap(crashes, facilityPoints);
+    computeFacilityGap(crashes, facilityGrid);
   } catch (err) {
     console.warn('Bike facility load failed:', err);
     noteEl.textContent = 'Bike facility data unavailable.';
@@ -752,17 +774,53 @@ async function initRiskMap(crashes) {
   loadSchoolData(crashes, map);
 }
 
-function sampleLinePoints(latlngs, out) {
-  // latlngs is array of [lat, lon] or nested arrays
+// Lat/lon grid bucket — drops O(crashes × points) brute-force into O(1) cell
+// lookups per crash. Cell size matches the proximity threshold so we only ever
+// need to check the crash's own cell plus the 8 neighbours.
+const FACILITY_CELL_M    = 100; // grid cell width in metres
+const FACILITY_SAMPLE_M  = 50;  // line sampling step in metres
+class FacilityGrid {
+  constructor() { this.cells = new Map(); this.size = 0; }
+  _key(lat, lon) {
+    // ~111,320 m per degree lat; lon scaled by cos at our latitude (~37°)
+    const cy = Math.floor(lat * 111320 / FACILITY_CELL_M);
+    const cx = Math.floor(lon * 111320 * Math.cos(lat * Math.PI / 180) / FACILITY_CELL_M);
+    return `${cx},${cy}`;
+  }
+  add(lat, lon) {
+    const k = this._key(lat, lon);
+    let bucket = this.cells.get(k);
+    if (!bucket) { bucket = []; this.cells.set(k, bucket); }
+    bucket.push([lat, lon]);
+    this.size++;
+  }
+  // Returns true if any sampled facility point is within `thresholdM` of (lat, lon).
+  hasNeighborWithin(lat, lon, thresholdM) {
+    const baseCy = Math.floor(lat * 111320 / FACILITY_CELL_M);
+    const baseCx = Math.floor(lon * 111320 * Math.cos(lat * Math.PI / 180) / FACILITY_CELL_M);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = this.cells.get(`${baseCx + dx},${baseCy + dy}`);
+        if (!bucket) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          if (distMFast(lat, lon, bucket[i][0], bucket[i][1]) < thresholdM) return true;
+        }
+      }
+    }
+    return false;
+  }
+}
+
+function sampleLinePointsIntoGrid(latlngs, grid) {
   const flat = flattenCoords(latlngs);
   for (let i = 0; i < flat.length - 1; i++) {
     const [lat1, lon1] = flat[i];
     const [lat2, lon2] = flat[i + 1];
     const segLen = distMFast(lat1, lon1, lat2, lon2);
-    const steps  = Math.max(1, Math.floor(segLen / 20));
+    const steps  = Math.max(1, Math.floor(segLen / FACILITY_SAMPLE_M));
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
-      out.push([lat1 + (lat2 - lat1) * t, lon1 + (lon2 - lon1) * t]);
+      grid.add(lat1 + (lat2 - lat1) * t, lon1 + (lon2 - lon1) * t);
     }
   }
 }
@@ -782,20 +840,14 @@ function geomToLatLng(geometry) {
   return null;
 }
 
-function computeFacilityGap(crashes, facilityPoints) {
-  if (!facilityPoints.length) return;
+function computeFacilityGap(crashes, facilityGrid) {
+  if (!facilityGrid.size) return;
   const THRESHOLD_M = 50;
 
   let noFacility = 0;
   crashes.forEach(f => {
     const [lon, lat] = f.geometry.coordinates;
-    let minDist = Infinity;
-    for (let i = 0; i < facilityPoints.length; i++) {
-      const d = distMFast(lat, lon, facilityPoints[i][0], facilityPoints[i][1]);
-      if (d < minDist) minDist = d;
-      if (minDist < THRESHOLD_M) break; // found one close enough
-    }
-    if (minDist >= THRESHOLD_M) noFacility++;
+    if (!facilityGrid.hasNeighborWithin(lat, lon, THRESHOLD_M)) noFacility++;
   });
 
   const pct = Math.round((noFacility / crashes.length) * 100);
@@ -807,7 +859,7 @@ async function loadSchoolData(crashes, map) {
   const chartWrap = document.getElementById('school-chart-wrap');
 
   try {
-    const schoolGJ = await fetchJSON(DATA_SOURCES.schools);
+    const schoolGJ = await fetchLocalOrRemote('data/joplin_schools.geojson', DATA_SOURCES.schools);
     const schools = (schoolGJ.features || []).filter(f => f.geometry?.coordinates);
 
     const QUARTER_MILE_M = 402;
